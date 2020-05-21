@@ -761,6 +761,10 @@
         </channel>
       </control_channels>
     </plugin>
+    <plugin name='thermal_plugin' filename='libgazebo_thermal_plugin.so'>
+          <thermalCenter>0 20 0</thermalCenter>
+          <thermalStrength>10.0</thermalStrength>
+    </plugin>
     <static>0</static>
   </model>
 </sdf>
