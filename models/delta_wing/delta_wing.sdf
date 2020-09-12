@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version="1.6">
-  <model name="zephyr_delta_wing">
+  <model name="delta_wing">
     <pose>0 0 0.02577 0 0 0</pose>
     <link name="base_link">
       <inertial>
@@ -18,7 +18,7 @@
       <visual name="visual">
         <geometry>
           <mesh>
-            <uri>model://zephyr_delta_wing/meshes/wing.dae</uri>
+            <uri>model://delta_wing/meshes/wing.dae</uri>
             <submesh>
               <name>Wing</name>
               <center>true</center>
@@ -29,7 +29,7 @@
       <collision name="body_collision">
         <geometry>
           <mesh>
-            <uri>model://zephyr_delta_wing/meshes/wing.dae</uri>
+            <uri>model://delta_wing/meshes/wing.dae</uri>
             <submesh>
               <name>Wing</name>
               <center>true</center>
@@ -136,7 +136,7 @@
       <visual name="visual">
         <geometry>
           <mesh>
-            <uri>model://zephyr_delta_wing/meshes/wing.dae</uri>
+            <uri>model://delta_wing/meshes/wing.dae</uri>
             <submesh>
               <name>Propeller</name>
               <center>true</center>
@@ -179,7 +179,7 @@
       <visual name="visual">
         <geometry>
           <mesh>
-            <uri>model://zephyr_delta_wing/meshes/wing.dae</uri>
+            <uri>model://delta_wing/meshes/wing.dae</uri>
             <submesh>
               <name>Flap_Left</name>
               <center>true</center>
@@ -214,7 +214,7 @@
       <visual name="visual">
         <geometry>
           <mesh>
-            <uri>model://zephyr_delta_wing/meshes/wing.dae</uri>
+            <uri>model://delta_wing/meshes/wing.dae</uri>
             <submesh>
               <name>Flap_Right</name>
               <center>true</center>
