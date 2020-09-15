@@ -35,6 +35,8 @@ jobs:
         brew tap PX4/px4
         brew install px4-dev
         brew install px4-sim
+        brew remove --ignore-dependencies gazebo9;
+        brew install --build-from-source gazebo11;
         pip3 install --user --upgrade setuptools
         pip3 install --user --upgrade rospkg pyserial empy toml numpy pandas jinja2
     - name: After Install
