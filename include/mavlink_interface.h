@@ -49,6 +49,14 @@
 #include <mavlink/v2.0/common/mavlink.h>
 #include "msgbuffer.h"
 
+// 하는 일
+//  * PX4 <-> Gazebo 통신
+//  * PX4로부터 MAVLink 메시지 수신 : 어떤 메시지?
+//  * Gazebo의 정보를 MAVLink 메시지로 발신 : 어떤 메시지?
+//  * 통신 프로토콜
+//    * MAVLink 사용
+//  * 어디서 사용하는가?
+
 static const uint32_t kDefaultMavlinkUdpPort = 14560;
 static const uint32_t kDefaultMavlinkTcpPort = 4560;
 static const uint32_t kDefaultQGCUdpPort = 14550;
@@ -58,10 +66,12 @@ using lock_guard = std::lock_guard<std::recursive_mutex>;
 static constexpr auto kDefaultDevice = "/dev/ttyACM0";
 static constexpr auto kDefaultBaudRate = 921600;
 
+// 최대 buffer 크기 
 //! Maximum buffer size with padding for CRC bytes (280 + padding)
 static constexpr ssize_t MAX_SIZE = MAVLINK_MAX_PACKET_LEN + 16;
 static constexpr size_t MAX_TXQ_SIZE = 1000;
 
+// 수신한 MAVLink 패킷의 상태 : 정상 여부 
 //! Rx packer framing status. (same as @p mavlink::mavlink_framing_t)
 enum class Framing : uint8_t {
 	incomplete = MAVLINK_FRAMING_INCOMPLETE,
@@ -70,6 +80,7 @@ enum class Framing : uint8_t {
 	bad_signature = MAVLINK_FRAMING_BAD_SIGNATURE,
 };
 
+// bitmask로 어떤 센서 정보인지 판단
 //! Enumeration to use on the bitmask in HIL_SENSOR
 enum class SensorSource {
   ACCEL		= 0b111,
