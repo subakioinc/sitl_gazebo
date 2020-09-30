@@ -29,6 +29,9 @@ GazeboWindPlugin::~GazeboWindPlugin() {
 }
 
 void GazeboWindPlugin::Load(physics::WorldPtr world, sdf::ElementPtr sdf) {
+  //초기화 
+  // gazebo Load 함수에서는 SDF으로 부터 parameter들을 가지고오고 
+  // 계산을 통해 publish하는 동작을 함 
   world_ = world;
 
   double wind_gust_start = kDefaultWindGustStart;
@@ -54,12 +57,14 @@ void GazeboWindPlugin::Load(physics::WorldPtr world, sdf::ElementPtr sdf) {
   pub_interval_ = (pub_rate > 0.0) ? 1/pub_rate : 0.0;
   getSdfParam<std::string>(sdf, "frameId", frame_id_, frame_id_);
   // Get the wind params from SDF.
+  // SDF파일(world, model)로 부터 wind 파라미터 값을 가지고 옴
   getSdfParam<double>(sdf, "windVelocityMean", wind_velocity_mean_, wind_velocity_mean_);
   getSdfParam<double>(sdf, "windVelocityMax", wind_velocity_max_, wind_velocity_max_);
   getSdfParam<double>(sdf, "windVelocityVariance", wind_velocity_variance_, wind_velocity_variance_);
   getSdfParam<ignition::math::Vector3d>(sdf, "windDirectionMean", wind_direction_mean_, wind_direction_mean_);
   getSdfParam<double>(sdf, "windDirectionVariance", wind_direction_variance_, wind_direction_variance_);
   // Get the wind gust params from SDF.
+  // SDF 파일에서 wind gust(돌풍)관련 파라미터를 가지고옴 
   getSdfParam<double>(sdf, "windGustStart", wind_gust_start, wind_gust_start);
   getSdfParam<double>(sdf, "windGustDuration", wind_gust_duration, wind_gust_duration);
   getSdfParam<double>(sdf, "windGustVeloctiyMean", wind_gust_velocity_mean_, wind_gust_velocity_mean_);
@@ -72,21 +77,28 @@ void GazeboWindPlugin::Load(physics::WorldPtr world, sdf::ElementPtr sdf) {
   wind_gust_direction_mean_.Normalize();
   wind_gust_start_ = common::Time(wind_gust_start);
   wind_gust_end_ = common::Time(wind_gust_start + wind_gust_duration);
+ 
   // Set random wind velocity mean and standard deviation
+  // 랜덤한 바람의 평균속도 및 표준편차를 설정 
   wind_velocity_distribution_.param(std::normal_distribution<double>::param_type(wind_velocity_mean_, sqrt(wind_velocity_variance_)));
   // Set random wind direction mean and standard deviation
+  // 랜덤한 바람의 평균 풍향 및 표준편차를 설정 
   wind_direction_distribution_X_.param(std::normal_distribution<double>::param_type(wind_direction_mean_.X(), sqrt(wind_direction_variance_)));
   wind_direction_distribution_Y_.param(std::normal_distribution<double>::param_type(wind_direction_mean_.Y(), sqrt(wind_direction_variance_)));
   wind_direction_distribution_Z_.param(std::normal_distribution<double>::param_type(wind_direction_mean_.Z(), sqrt(wind_direction_variance_)));
   // Set random wind gust velocity mean and standard deviation
+  // 랜덤한 돌풀의 평균속도 및 평균편차를 설정한다 
   wind_gust_velocity_distribution_.param(std::normal_distribution<double>::param_type(wind_gust_velocity_mean_, sqrt(wind_gust_velocity_variance_)));
   // Set random wind gust direction mean and standard deviation
+  // 돌풍의 평균방향과 표준편차를 설정한다 
   wind_gust_direction_distribution_X_.param(std::normal_distribution<double>::param_type(wind_gust_direction_mean_.X(), sqrt(wind_gust_direction_variance_)));
   wind_gust_direction_distribution_Y_.param(std::normal_distribution<double>::param_type(wind_gust_direction_mean_.Y(), sqrt(wind_gust_direction_variance_)));
   wind_gust_direction_distribution_Z_.param(std::normal_distribution<double>::param_type(wind_gust_direction_mean_.Z(), sqrt(wind_gust_direction_variance_)));
 
   // Listen to the update event. This event is broadcast every
   // simulation iteration.
+  // 업데이트 이벤트를 듣는다 
+  // 이 이벤트를 매 시뮬레이션 iteration 마다 pub? 한다 
   update_connection_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboWindPlugin::OnUpdate, this, _1));
 
   wind_pub_ = node_handle_->Advertise<physics_msgs::msgs::Wind>("~/" + wind_pub_topic_, 10);
@@ -100,8 +112,11 @@ void GazeboWindPlugin::Load(physics::WorldPtr world, sdf::ElementPtr sdf) {
 }
 
 // This gets called by the world update start event.
+// world update 시작 이벤트에 의해 호추 되는 함수 
+// (이 플러그인은 world/model에 대한 의존성을 가지고 있음) 
 void GazeboWindPlugin::OnUpdate(const common::UpdateInfo& _info) {
   // Get the current simulation time.
+  // 현재 시뮬레이션시간을 가지고 온다 
 #if GAZEBO_MAJOR_VERSION >= 9
   common::Time now = world_->SimTime();
 #else
@@ -114,23 +129,30 @@ void GazeboWindPlugin::OnUpdate(const common::UpdateInfo& _info) {
 
   // Calculate the wind force.
   // Get normal distribution wind strength
+  // 바람의 힘을 계산 
+  // 일반적인 바람의 힘을 가지고 온다 
   double wind_strength = std::abs(wind_velocity_distribution_(wind_velocity_generator_));
   wind_strength = (wind_strength > wind_velocity_max_) ? wind_velocity_max_ : wind_strength;
   // Get normal distribution wind direction
+  // 바람의 방향을 가지고 온다 
   ignition::math::Vector3d wind_direction;
   wind_direction.X() = wind_direction_distribution_X_(wind_direction_generator_);
   wind_direction.Y() = wind_direction_distribution_Y_(wind_direction_generator_);
   wind_direction.Z() = wind_direction_distribution_Z_(wind_direction_generator_);
   // Calculate total wind velocity
+  // 총 바람의 속도를 계산
   ignition::math::Vector3d wind = wind_strength * wind_direction;
 
   ignition::math::Vector3d wind_gust(0, 0, 0);
   // Calculate the wind gust velocity.
+  // 돌풍의 속도를 계산
   if (now >= wind_gust_start_ && now < wind_gust_end_) {
     // Get normal distribution wind gust strength
+    // 일반적으로 분배 되는 돌풍의 힘을 가지고 온다 
     double wind_gust_strength = std::abs(wind_gust_velocity_distribution_(wind_gust_velocity_generator_));
     wind_gust_strength = (wind_gust_strength > wind_gust_velocity_max_) ? wind_gust_velocity_max_ : wind_gust_strength;
     // Get normal distribution wind gust direction
+    // 일반적으로 분배 되는 돌풍의 방향을 가지고 온다
     ignition::math::Vector3d wind_gust_direction;
     wind_gust_direction.X() = wind_gust_direction_distribution_X_(wind_gust_direction_generator_);
     wind_gust_direction.Y() = wind_gust_direction_distribution_Y_(wind_gust_direction_generator_);
@@ -138,6 +160,7 @@ void GazeboWindPlugin::OnUpdate(const common::UpdateInfo& _info) {
     wind_gust = wind_gust_strength * wind_gust_direction;
   }
 
+  
   gazebo::msgs::Vector3d* wind_v = new gazebo::msgs::Vector3d();
   wind_v->set_x(wind.X() + wind_gust.X());
   wind_v->set_y(wind.Y() + wind_gust.Y());

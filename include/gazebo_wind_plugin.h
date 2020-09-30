@@ -32,8 +32,19 @@
 
 #include "Wind.pb.h"
 
+// 하는 일
+// - 바람의 세기 및 방향에 따라 모델에 작용 되는 상황 시뮬레이션을 위한 플러그인 
+
 namespace gazebo {
 // Default values
+// 바람의 풍속 방향등 적용 되는 인자들 초기화 
+// - wind : 
+//  - 평균풍속, 최대풍속, 풍속의 가변값
+// - gust : 
+//  - 평균풍속, 최대풍속, 풍속의 가변값
+// - direction :
+//  - 돌풍의 평균풍향, 바람의 평균풍향
+// - 
 static const std::string kDefaultNamespace = "";
 static const std::string kDefaultFrameId = "world";
 
@@ -44,6 +55,8 @@ static constexpr double kDefaultWindGustVelocityMean = 0.0;
 static constexpr double kDefaultWindGustVelocityMax = 10.0;
 static constexpr double kDefaultWindGustVelocityVariance = 0.0;
 
+// 돌풍의 시작 시간 
+// 돌풍의 지속 시간 
 static constexpr double kDefaultWindGustStart = 10.0;
 static constexpr double kDefaultWindGustDuration = 0.0;
 
@@ -53,7 +66,9 @@ static constexpr double kDefaultWindDirectionVariance = 0.0;
 static constexpr double kDefaultWindGustDirectionVariance = 0.0;
 
 /// \brief This gazebo plugin simulates wind acting on a model.
+/// 이 gazebo plugin은 모델에 작용하는 바람을 시뮬레이션 한다 
 class GazeboWindPlugin : public WorldPlugin {
+// windplugin 초기화 
  public:
   GazeboWindPlugin()
       : WorldPlugin(),
@@ -79,14 +94,20 @@ class GazeboWindPlugin : public WorldPlugin {
   /// \brief Load the plugin.
   /// \param[in] _model Pointer to the model that loaded this plugin.
   /// \param[in] _sdf SDF element that describes the plugin.
+  /// 플러그인을 로드하는 함수
+  /// 첫번째 인자 : 이 플러그인을 로드하는 모델을 포인터로 갖는다 (부모 모델)
+  /// 두번째 인자 : 이 플러그인을 설명하는 sdf요소들 
   void Load(physics::WorldPtr world, sdf::ElementPtr sdf);
 
   /// \brief Called when the world is updated.
   /// \param[in] _info Update timing information.
+  /// world가 업데이트 될때 호출 되는 콜백 함수 
+  /// 인자 : 업데이트 되는 시간 정보 
   void OnUpdate(const common::UpdateInfo& /*_info*/);
 
  private:
   /// \brief Pointer to the update event connection.
+  /// 업데이트 이벤트와 연결하는 포인터 
   event::ConnectionPtr update_connection_;
 
   physics::WorldPtr world_;
@@ -126,6 +147,7 @@ class GazeboWindPlugin : public WorldPlugin {
   common::Time wind_gust_start_;
   common::Time last_time_;
 
+// gazebo 내의 통신을 위한 handle 및 포인터 
   transport::NodePtr node_handle_;
   transport::PublisherPtr wind_pub_;
 
