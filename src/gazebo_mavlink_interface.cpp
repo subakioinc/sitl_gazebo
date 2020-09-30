@@ -24,6 +24,7 @@ namespace gazebo {
 GZ_REGISTER_MODEL_PLUGIN(GazeboMavlinkInterface);
 
 GazeboMavlinkInterface::GazeboMavlinkInterface() : ModelPlugin(){
+    //mavlink 통신을 위한 interface (mavlink 통신 자체. gazebo_mavlink_interface는 gazebo <-> mavlink 통신을 연결하는 plugin)
       mavlink_interface_ = std::make_unique<MavlinkInterface>();
 
 }
@@ -127,6 +128,7 @@ void GazeboMavlinkInterface::CreateSensorSubscription(
   }
 }
 
+// mavlink_interface model을 메모리에 올리면서 초기화 진행
 void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
 
   model_ = _model;
@@ -146,8 +148,10 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
   node_handle_ = transport::NodePtr(new transport::Node());
   node_handle_->Init(namespace_);
 
+  // publish 하는 message : motor velocity
   getSdfParam<std::string>(_sdf, "motorSpeedCommandPubTopic", motor_velocity_reference_pub_topic_,
       motor_velocity_reference_pub_topic_);
+  // subscribe 하는 message들
   getSdfParam<std::string>(_sdf, "imuSubTopic", imu_sub_topic_, imu_sub_topic_);
   getSdfParam<std::string>(_sdf, "visionSubTopic", vision_sub_topic_, vision_sub_topic_);
   getSdfParam<std::string>(_sdf, "opticalFlowSubTopic",
@@ -169,6 +173,7 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
     input_reference_[i] = 0;
   }
 
+  // sdf에 있에서 parameter 가져오기
   if (_sdf->HasElement("control_channels")) {
     sdf::ElementPtr control_channels = _sdf->GetElement("control_channels");
     sdf::ElementPtr channel = control_channels->GetElement("channel");
@@ -296,6 +301,7 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
   }
   gzmsg << "Lockstep is " << (enable_lockstep_ ? "enabled" : "disabled") << "\n";
 
+  // lockstep은 simulation속도를 조절 가능한 모드. PX4_SIM_SPEED_FACTOR 로 설정 가능
   // When running in lockstep, we can run the simulation slower or faster than
   // realtime. The speed can be set using the env variable PX4_SIM_SPEED_FACTOR.
   if (enable_lockstep_)
@@ -353,6 +359,7 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
     presetManager->SetCurrentProfileParam("real_time_update_rate", real_time_update_rate);
   }
 
+  // update 이벤트 수신. simulation이 매번 호출될때마다 이 event를 broadcast하게 된다. 
   // Listen to the update event. This event is broadcast every
   // simulation iteration.
   updateConnection_ = event::Events::ConnectWorldUpdateBegin(
@@ -362,6 +369,7 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
   sigIntConnection_ = event::Events::ConnectSigInt(
       boost::bind(&GazeboMavlinkInterface::onSigInt, this));
 
+  // subscribe하고자 하는 message를 callback으로 등록
   // Subscribe to messages of other plugins.
   imu_sub_ = node_handle_->Subscribe("~/" + model_->GetName() + imu_sub_topic_, &GazeboMavlinkInterface::ImuCallback, this);
   opticalFlow_sub_ = node_handle_->Subscribe("~/" + model_->GetName() + opticalFlow_sub_topic_, &GazeboMavlinkInterface::OpticalFlowCallback, this);
@@ -376,6 +384,7 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
   // Get the model joints
   auto joints = model_->GetJoints();
 
+  // 거리 센서에 대한 subscribe를 위해서 joint 정보를 함께 전달해 줘야 한다. 
   // Create subscriptions to the distance sensors
   CreateSensorSubscription(&GazeboMavlinkInterface::LidarCallback, this, joints, kDefaultLidarModelJointNaming);
   CreateSensorSubscription(&GazeboMavlinkInterface::SonarCallback, this, joints, kDefaultSonarModelJointNaming);
@@ -411,6 +420,7 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
   auto worldName = world_->GetName();
 #endif
 
+  // 통신을 위한 설정 (serial/udp/tcp baud rate 등)
   if (_sdf->HasElement("mavlink_udp_port")) {
     int mavlink_udp_port = _sdf->GetElement("mavlink_udp_port")->Get<int>();
     mavlink_interface_->SetMavlinkUdpPort(mavlink_udp_port);
@@ -485,11 +495,13 @@ void GazeboMavlinkInterface::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf
   mavlink_interface_->Load();
 }
 
+// world가 update될때마다 호출 (주기적으로 호출)
 // This gets called by the world update start event.
 void GazeboMavlinkInterface::OnUpdate(const common::UpdateInfo&  /*_info*/) {
 
   std::unique_lock<std::mutex> lock(last_imu_message_mutex_);
 
+  // imu msg의 seq가 새로 업데이트될때까지 10ms 대기
   if (previous_imu_seq_ > 0) {
     while (previous_imu_seq_ == last_imu_message_.seq() && IsRunning()) {
       last_imu_message_cond_.wait_for(lock, std::chrono::milliseconds(10));
@@ -512,15 +524,18 @@ void GazeboMavlinkInterface::OnUpdate(const common::UpdateInfo&  /*_info*/) {
 
   bool close_conn_ = false;
 
+  // hil mode인 경우 QGC에서 data 가져오기
   if (hil_mode_) {
     mavlink_interface_->pollFromQgcAndSdk();
-  } else {
+  } else { // hil mode가 아닌 경우 mavlink 
     mavlink_interface_->pollForMAVLinkMessages();
   }
 
+  //gyro와 accel 데이터는 update()가 호출될때마다 전송
   // Always send Gyro and Accel data at full rate (= sim update rate)
   SendSensorMessages();
 
+  // groundtruth도 
   // Send groudntruth at full rate
   SendGroundTruth();
 
@@ -732,6 +747,7 @@ void GazeboMavlinkInterface::SendGroundTruth()
   hil_state_quat.vy = vel_n.Y() * 100;
   hil_state_quat.vz = vel_n.Z() * 100;
 
+  // airspeed는 pitot과 align
   // assumed indicated airspeed due to flow aligned with pitot (body x)
   hil_state_quat.ind_airspeed = vel_b.X();
 
@@ -745,6 +761,7 @@ void GazeboMavlinkInterface::SendGroundTruth()
   hil_state_quat.yacc = accel_true_b.Y() * 1000;
   hil_state_quat.zacc = accel_true_b.Z() * 1000;
 
+  // HIL_STATE_QUATERNION mavlink 메시지 참고 : https://mavlink.io/en/messages/common.html#HIL_STATE_QUATERNION
   if (!hil_mode_ || (hil_mode_ && hil_state_level_)) {
     mavlink_message_t msg;
     mavlink_msg_hil_state_quaternion_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &hil_state_quat);
@@ -773,7 +790,7 @@ void GazeboMavlinkInterface::GpsCallback(GpsPtr& gps_msg, const int& id) {
   hil_gps_msg.satellites_visible = 10;
   hil_gps_msg.id = id;
 
-  // send HIL_GPS Mavlink msg
+  // send HIL_GPS Mavlink msg 참고 : https://mavlink.io/en/messages/common.html#HIL_GPS
   if (!hil_mode_ || (hil_mode_ && !hil_state_level_)) {
     mavlink_message_t msg;
     mavlink_msg_hil_gps_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &hil_gps_msg);
@@ -781,6 +798,7 @@ void GazeboMavlinkInterface::GpsCallback(GpsPtr& gps_msg, const int& id) {
   }
 }
 
+//이 callback은 groundtruth관련 변수 채워주는 역할만 수행
 void GazeboMavlinkInterface::GroundtruthCallback(GtPtr& groundtruth_msg) {
   // update groundtruth lat_rad, lon_rad and altitude
   groundtruth_lat_rad_ = groundtruth_msg->latitude_rad();
@@ -832,6 +850,7 @@ void GazeboMavlinkInterface::LidarCallback(LidarPtr& lidar_message, const int& i
     optflow_distance_ = lidar_message->current_distance();  // [m]
   }
 
+  // 참고 : https://mavlink.io/en/messages/common.html#DISTANCE_SENSOR
   mavlink_message_t msg;
   mavlink_msg_distance_sensor_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &sensor_msg);
   mavlink_interface_->send_mavlink_message(&msg);
@@ -862,6 +881,7 @@ void GazeboMavlinkInterface::OpticalFlowCallback(OpticalFlowPtr& opticalFlow_mes
   sensor_msg.time_delta_distance_us = opticalFlow_message->time_delta_distance_us();
   sensor_msg.distance = optflow_distance_;
 
+  // mavlink 메시지 찾기 : ??
   mavlink_message_t msg;
   mavlink_msg_hil_optical_flow_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &sensor_msg);
   mavlink_interface_->send_mavlink_message(&msg);
@@ -903,6 +923,7 @@ void GazeboMavlinkInterface::SonarCallback(SonarPtr& sonar_message, const int& i
     optflow_distance_ = sonar_message->current_distance();  // [m]
   }
 
+  // 거리 센서 message
   mavlink_message_t msg;
   mavlink_msg_distance_sensor_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &sensor_msg);
   mavlink_interface_->send_mavlink_message(&msg);
@@ -919,6 +940,7 @@ void GazeboMavlinkInterface::IRLockCallback(IRLockPtr& irlock_message) {
   sensor_msg.position_valid = false;
   sensor_msg.type = LANDING_TARGET_TYPE_LIGHT_BEACON;
 
+  // 착륙 타겟 message
   mavlink_message_t msg;
   mavlink_msg_landing_target_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &sensor_msg);
   mavlink_interface_->send_mavlink_message(&msg);
@@ -1004,6 +1026,7 @@ void GazeboMavlinkInterface::VisionCallback(OdomPtr& odom_message) {
       }
     }
 
+    // odometry message
     mavlink_msg_odometry_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &odom);
     mavlink_interface_->send_mavlink_message(&msg);
   }
@@ -1040,6 +1063,7 @@ void GazeboMavlinkInterface::VisionCallback(OdomPtr& odom_message) {
       }
     }
 
+    // vision position estimate message
     mavlink_msg_vision_position_estimate_encode_chan(1, 200, MAVLINK_COMM_0, &msg, &vision);
     mavlink_interface_->send_mavlink_message(&msg);
   }
@@ -1074,7 +1098,7 @@ void GazeboMavlinkInterface::WindVelocityCallback(WindPtr& msg) {
             msg->velocity().y(),
             msg->velocity().z());
 }
-
+// PX4로부터 받은 actuator control로부터 input_reference 계산하기. 이 정보를 기반으로 이후 handle_control()에서 joint에 가해지는 힘을 계산
 void GazeboMavlinkInterface::handle_actuator_controls() {
   bool armed = mavlink_interface_->GetArmedState();
 
@@ -1093,7 +1117,8 @@ void GazeboMavlinkInterface::handle_actuator_controls() {
   Eigen::VectorXd actuator_controls = mavlink_interface_->GetActuatorControls();
   if (actuator_controls.size() < n_out_max) return; //TODO: Handle this properly
   for (int i = 0; i < input_reference_.size(); i++) {
-    if (armed) {
+    if (armed) { // arming이 된 경우
+      // input_reference 계산 = (모터_제어 + offset) * scaling + zero_position_armed
       input_reference_[i] = (actuator_controls[input_index_[i]] + input_offset_[i])
           * input_scaling_[i] + zero_position_armed_[i];
       // std::cout << input_reference_ << ", ";
@@ -1112,14 +1137,15 @@ void GazeboMavlinkInterface::handle_control(double _dt)
   for (int i = 0; i < input_reference_.size(); i++) {
     if (joints_[i] || joint_control_type_[i] == "position_gztopic") {
       double target = input_reference_[i];
-      if (joint_control_type_[i] == "velocity")
+      if (joint_control_type_[i] == "velocity") // 속도 제어
       {
+        // joint에 가해지는 새로운 힘을 PID 제어기로 업데이트
         double current = joints_[i]->GetVelocity(0);
         double err = current - target;
         double force = pids_[i].Update(err, _dt);
         joints_[i]->SetForce(0, force);
       }
-      else if (joint_control_type_[i] == "position")
+      else if (joint_control_type_[i] == "position") // 위치 제어
       {
 
 #if GAZEBO_MAJOR_VERSION >= 9
@@ -1152,6 +1178,7 @@ void GazeboMavlinkInterface::handle_control(double _dt)
       }
       else if (joint_control_type_[i] == "position_kinematic")
       {
+        // drone이 움직이지 않는 상태라면 실제로는 이상적인 방법이 아니다.
         /// really not ideal if your drone is moving at all,
         /// mixing kinematic updates with dynamics calculation is
         /// non-physical.
