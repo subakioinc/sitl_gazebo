@@ -31,12 +31,14 @@ GazeboMotorModel::~GazeboMotorModel() {
 
 void GazeboMotorModel::InitializeParams() {}
 
+// turning velocity msg에 joint의 속도를 넣어주고 publish는 하지 않음.
 void GazeboMotorModel::Publish() {
   turning_velocity_msg_.set_data(joint_->GetVelocity(0));
   // FIXME: Commented out to prevent warnings about queue limit reached.
   // motor_velocity_pub_->Publish(turning_velocity_msg_);
 }
 
+// 변수 초기화, parameter 초기화
 void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
   model_ = _model;
 
@@ -53,11 +55,13 @@ void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
     joint_name_ = _sdf->GetElement("jointName")->Get<std::string>();
   else
     gzerr << "[gazebo_motor_model] Please specify a jointName, where the rotor is attached.\n";
+  // joint 얻어오기
   // Get the pointer to the joint.
   joint_ = model_->GetJoint(joint_name_);
   if (joint_ == NULL)
     gzthrow("[gazebo_motor_model] Couldn't find specified joint \"" << joint_name_ << "\".");
 
+  // joint를 제어하기 위한 PID 설정
   // setup joint control pid to control joint
   if (_sdf->HasElement("joint_control_pid"))
   {
@@ -100,11 +104,13 @@ void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
     gzthrow("[gazebo_motor_model] Couldn't find specified link \"" << link_name_ << "\".");
 
 
+  // motor 개수 얻어오기
   if (_sdf->HasElement("motorNumber"))
     motor_number_ = _sdf->GetElement("motorNumber")->Get<int>();
   else
     gzerr << "[gazebo_motor_model] Please specify a motorNumber.\n";
 
+  // motor 회전 방향 : CW, CCW
   if (_sdf->HasElement("turningDirection")) {
     std::string turning_direction = _sdf->GetElement("turningDirection")->Get<std::string>();
     if (turning_direction == "cw")
@@ -145,10 +151,12 @@ void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
 #if GAZEBO_MAJOR_VERSION < 5
   joint_->SetMaxForce(0, max_force_);
 #endif
+  // simulation 매번 실행될때 마다 event 받기 위해서 binding
   // Listen to the update event. This event is broadcast every
   // simulation iteration.
   updateConnection_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboMotorModel::OnUpdate, this, _1));
 
+  // subscription : motor속도 명령, motor failure, wind 속도
   command_sub_ = node_handle_->Subscribe<mav_msgs::msgs::CommandMotorSpeed>("~/" + model_->GetName() + command_sub_topic_, &GazeboMotorModel::VelocityCallback, this);
   //std::cout << "[gazebo_motor_model]: Subscribe to gz topic: "<< motor_failure_sub_topic_ << std::endl;
   motor_failure_sub_ = node_handle_->Subscribe<msgs::Int>(motor_failure_sub_topic_, &GazeboMotorModel::MotorFailureCallback, this);
@@ -156,6 +164,7 @@ void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
   //motor_velocity_pub_ = node_handle_->Advertise<std_msgs::msgs::Float>("~/" + model_->GetName() + motor_speed_pub_topic_, 1);
   wind_sub_ = node_handle_->Subscribe("~/" + wind_sub_topic_, &GazeboMotorModel::WindVelocityCallback, this);
 
+  // 1차 필터 생성
   // Create the first order filter.
   rotor_velocity_filter_.reset(new FirstOrderFilter<double>(time_constant_up_, time_constant_down_, ref_motor_rot_vel_));
 }
@@ -172,6 +181,7 @@ void GazeboMotorModel::testProto(MotorSpeedPtr &msg) {
 }
 */
 
+// world가 update될때마다 호출. 작용하는 힘 update, Motor fail 여부 확인, 
 // This gets called by the world update start event.
 void GazeboMotorModel::OnUpdate(const common::UpdateInfo& _info) {
   sampling_time_ = _info.simTime.Double() - prev_sim_time_;
@@ -227,6 +237,7 @@ void GazeboMotorModel::UpdateForcesAndMoments() {
 #else
   ignition::math::Vector3d joint_axis = ignitionFromGazeboMath(joint_->GetGlobalAxis(0));
 #endif
+  // wind 속도를 적용
   ignition::math::Vector3d relative_wind_velocity = body_velocity - wind_vel_;
   ignition::math::Vector3d body_velocity_perpendicular = relative_wind_velocity - (relative_wind_velocity.Dot(joint_axis)) * joint_axis;
   ignition::math::Vector3d air_drag = -std::abs(real_motor_velocity) * rotor_drag_coefficient_ * body_velocity_perpendicular;
@@ -299,6 +310,7 @@ void GazeboMotorModel::UpdateMotorFail() {
   }
 }
 
+// wind msg를 수신하는 경우 callback으로 호출
 void GazeboMotorModel::WindVelocityCallback(WindPtr& msg) {
   wind_vel_ = ignition::math::Vector3d(msg->velocity().x(),
             msg->velocity().y(),
