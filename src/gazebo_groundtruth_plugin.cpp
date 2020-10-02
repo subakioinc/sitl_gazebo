@@ -39,7 +39,8 @@
  */
 
 #include <gazebo_groundtruth_plugin.h>
-
+// Groundtruth 정보를 publish하는 plugin
+// gazebo world의 model에 대한 postiion, attitude를 가져와서 publish 
 namespace gazebo
 {
 GZ_REGISTER_MODEL_PLUGIN(GroundtruthPlugin)
@@ -53,7 +54,7 @@ GroundtruthPlugin::~GroundtruthPlugin()
     updateConnection_->~Connection();
   world_->Reset();
 }
-
+// 변수 및 parameter 초기화
 void GroundtruthPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
 {
   // Store the ptr to the model
@@ -62,11 +63,13 @@ void GroundtruthPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
   // Store the ptr to the world
   world_ = model_->GetWorld();
 
+  // PX4의 HOME 위치 위도, 경도, 고도
   // Use environment variables if set for home position.
   const char *env_lat = std::getenv("PX4_HOME_LAT");
   const char *env_lon = std::getenv("PX4_HOME_LON");
   const char *env_alt = std::getenv("PX4_HOME_ALT");
 
+  // 구 좌표로 설정되어 있는지 여부 
   // Check if the world spherical coordinates are set and use them in that case
   const bool world_has_origin = checkWorldHomePosition(world_, world_latitude_, world_longitude_, world_altitude_);
 
@@ -114,6 +117,7 @@ void GroundtruthPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
   node_handle_ = transport::NodePtr(new transport::Node());
   node_handle_->Init(namespace_);
 
+  // world와 동기화 시켜서 OnUpdate가 호출되도록 binding
   // Listen to the update event. This event is broadcast every simulation iteration.
   updateConnection_ = event::Events::ConnectWorldUpdateBegin(
       boost::bind(&GroundtruthPlugin::OnUpdate, this, _1));
@@ -121,6 +125,7 @@ void GroundtruthPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
   gt_pub_ = node_handle_->Advertise<sensor_msgs::msgs::Groundtruth>("~/" + model_->GetName() + "/groundtruth", 10);
 }
 
+// 주기적으로 호출. model의 position과 attitude 사용하여 groundtruth msg를 채워서 publish
 void GroundtruthPlugin::OnUpdate(const common::UpdateInfo&)
 {
 #if GAZEBO_MAJOR_VERSION >= 9
@@ -141,6 +146,7 @@ void GroundtruthPlugin::OnUpdate(const common::UpdateInfo&)
   // reproject position into geographic coordinates
   auto latlon_gt = reproject(pos_W_I, lat_home_, lon_home_, alt_home_);
 
+  // groundthruth 속도를 위해서 model의 world position을 사용
   // Use the models' world position for groundtruth velocity.
 #if GAZEBO_MAJOR_VERSION >= 9
   ignition::math::Vector3d velocity_current_W = model_->WorldLinearVel();
@@ -151,6 +157,7 @@ void GroundtruthPlugin::OnUpdate(const common::UpdateInfo&)
   ignition::math::Vector3d velocity_current_W_xy = velocity_current_W;
   velocity_current_W_xy.Z() = 0;
 
+  // 가져오 데이터로 Groundtruth msg 채우기
   // fill Groundtruth msg
   sensor_msgs::msgs::Groundtruth groundtruth_msg;
 

@@ -207,6 +207,7 @@ void GazeboMotorModel::UpdateForcesAndMoments() {
   if (motor_rot_vel_ / (2 * M_PI) > 1 / (2 * sampling_time_)) {
     gzerr << "Aliasing on motor [" << motor_number_ << "] might occur. Consider making smaller simulation time steps or raising the rotor_velocity_slowdown_sim_ param.\n";
   }
+  // 실제 motor 속도를 구해서 force를 구하기
   double real_motor_velocity = motor_rot_vel_ * rotor_velocity_slowdown_sim_;
   double force = real_motor_velocity * std::abs(real_motor_velocity) * motor_constant_;
   if(!reversible_) {
@@ -292,6 +293,7 @@ void GazeboMotorModel::UpdateForcesAndMoments() {
 }
 
 void GazeboMotorModel::UpdateMotorFail() {
+  // motor failure인 경우 속도를 0으로 설정
   if (motor_number_ == motor_Failure_Number_ - 1){
     // motor_constant_ = 0.0;
     joint_->SetVelocity(0,0);
